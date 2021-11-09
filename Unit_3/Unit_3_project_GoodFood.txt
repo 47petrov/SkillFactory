@@ -1,0 +1,6 @@
+1. комментарии и задание по итоговому проекту представлены в ноутбуке
+2. задача решалась на Kaggle
+- после 3 submission - score 0.20970 (434 место на Public leaderboard)
+https://www.kaggle.com/c/sf-dst-restaurant-rating/leaderboard#score
+
+3. в проекте можно попробовать и добавить еще два-три признака.
