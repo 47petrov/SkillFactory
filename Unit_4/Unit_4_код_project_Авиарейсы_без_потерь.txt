@@ -1,0 +1,69 @@
+-- отбираем 360 записей из таблицы "flights" (360 записей = 180 записей ECONOMY + 180 записей BUSINESS для каждого рейса)
+SELECT
+    flt.flight_id as id_рейса,
+    flt.arrival_airport as Аэропорт_вылета,
+    flt.departure_airport as Аэропорт_прилета,
+    arp.city as Город_вылета,
+    (date_part('day', flt.actual_departure)) as Дата_вылета,
+    (date_part('month', flt.actual_departure)) as Месяц_вылета,
+    (date_part('year', flt.actual_departure)) as Год_вылета,
+    flt.actual_arrival-flt.actual_departure as Длительность,
+    (abs(date_part('hour', flt.actual_arrival-flt.actual_departure)*60 + date_part('minute', flt.actual_arrival-flt.actual_departure))) as Время_полёта_в_минутах,
+    acf.model as Модель_самолета,
+    acf.range as Макс_дальность_полета,
+    sts.aircraft_code as Код_самолета_IATA,
+    sts.count_seats as Количество_мест,
+    (CASE
+    WHEN (tflt.fare_conditions = 'Economy' AND acf.model = 'Boeing 737-300') THEN (0.25*118)
+    WHEN (tflt.fare_conditions = 'Business' AND acf.model = 'Boeing 737-300') THEN (0.25*12)
+    WHEN (tflt.fare_conditions = 'Economy' AND acf.model = 'Sukhoi Superjet-100') THEN (0.25*85)
+    WHEN (tflt.fare_conditions = 'Business' AND acf.model = 'Sukhoi Superjet-100') THEN (0.25*12)
+    END) as Max_допустимое_колво_свободных_мест, --критерий оценки нерентабельного рейса
+    
+    (CASE
+    WHEN (tflt.fare_conditions = 'Economy' AND acf.model = 'Boeing 737-300') THEN (118-tflt.tickets_no)
+    WHEN (tflt.fare_conditions = 'Business' AND acf.model = 'Boeing 737-300') THEN (12-tflt.tickets_no)
+    WHEN (tflt.fare_conditions = 'Economy' AND acf.model = 'Sukhoi Superjet-100') THEN (85-tflt.tickets_no)
+    WHEN (tflt.fare_conditions = 'Business' AND acf.model = 'Sukhoi Superjet-100') THEN (12-tflt.tickets_no)
+    END) as Количество_свободных_мест,
+    tflt.tickets_no as Количество_купленных_билетов,
+    tflt.fare_conditions as Класс_обслуживания,
+    count(CASE WHEN tflt.fare_conditions = 'Economy' THEN tflt.fare_conditions END) AS Класс_Эконом,
+    count(CASE WHEN tflt.fare_conditions = 'Comfort' THEN tflt.fare_conditions END) AS Класс_Комфорт,
+    count(CASE WHEN tflt.fare_conditions = 'Business' THEN tflt.fare_conditions END) AS Класс_Бизнесс,
+    tflt.amount_tickets as Доход_от_продажи_билетов_рублей,
+    (CASE
+    WHEN (tflt.fare_conditions = 'Economy' AND acf.model = 'Boeing 737-300') THEN 0.908*((abs(date_part('hour', flt.actual_arrival-flt.actual_departure)*60 + date_part('minute', flt.actual_arrival-flt.actual_departure)))*2 * 2600/60 * 42.7)
+    WHEN (tflt.fare_conditions = 'Business' AND acf.model = 'Boeing 737-300') THEN 0.092*((abs(date_part('hour', flt.actual_arrival-flt.actual_departure)*60 + date_part('minute', flt.actual_arrival-flt.actual_departure)))*2 * 2600/60 * 42.7)
+    WHEN (tflt.fare_conditions = 'Economy' AND acf.model = 'Sukhoi Superjet-100') THEN 0.876*((abs(date_part('hour', flt.actual_arrival-flt.actual_departure)*60 + date_part('minute', flt.actual_arrival-flt.actual_departure)))*2 * 1700/60 * 42.7)
+    WHEN (tflt.fare_conditions = 'Business' AND acf.model = 'Sukhoi Superjet-100') THEN 0.124*((abs(date_part('hour', flt.actual_arrival-flt.actual_departure)*60 + date_part('minute', flt.actual_arrival-flt.actual_departure)))*2 * 1700/60 * 42.7)
+    END)  as Расход_на_топливо_рублей,
+    
+    (CASE
+    WHEN (tflt.fare_conditions = 'Economy' AND acf.model = 'Boeing 737-300') THEN (tflt.amount_tickets-0.908*((abs(date_part('hour', flt.actual_arrival-flt.actual_departure)*60 + date_part('minute', flt.actual_arrival-flt.actual_departure)))*2 * 2600/60 * 42.7))
+    WHEN (tflt.fare_conditions = 'Business' AND acf.model = 'Boeing 737-300') THEN (tflt.amount_tickets-0.092*((abs(date_part('hour', flt.actual_arrival-flt.actual_departure)*60 + date_part('minute', flt.actual_arrival-flt.actual_departure)))*2 * 2600/60 * 42.7))
+    WHEN (tflt.fare_conditions = 'Economy' AND acf.model = 'Sukhoi Superjet-100') THEN (tflt.amount_tickets-0.876*((abs(date_part('hour', flt.actual_arrival-flt.actual_departure)*60 + date_part('minute', flt.actual_arrival-flt.actual_departure)))*2 * 1700/60 * 42.7))
+    WHEN (tflt.fare_conditions = 'Business' AND acf.model = 'Sukhoi Superjet-100') THEN (tflt.amount_tickets-0.124*((abs(date_part('hour', flt.actual_arrival-flt.actual_departure)*60 + date_part('minute', flt.actual_arrival-flt.actual_departure)))*2 * 1700/60 * 42.7))
+    END)  as Прибыльность_рейса_рублей
+
+
+FROM dst_project.flights flt
+JOIN dst_project.aircrafts acf ON flt.aircraft_code=acf.aircraft_code
+JOIN
+  (SELECT s.aircraft_code,
+          count(s.seat_no) count_seats
+   FROM dst_project.seats s
+   GROUP BY 1) sts ON flt.aircraft_code = sts.aircraft_code
+JOIN
+  (SELECT t.flight_id, t.fare_conditions fare_conditions, count(t.ticket_no) tickets_no,
+          sum(t.amount) amount_tickets
+   FROM dst_project.ticket_flights t
+   GROUP BY 1, 2) tflt ON flt.flight_id=tflt.flight_id
+JOIN dst_project.airports arp ON flt.departure_airport=arp.airport_code
+
+WHERE flt.departure_airport = 'AAQ'
+  AND (date_trunc('month', flt.scheduled_departure) in ('2017-01-01','2017-02-01', '2017-12-01', '2016-12-01'))
+  AND flt.status not in ('Cancelled')
+  AND flt.actual_arrival IS NOT NULL
+
+GROUP BY flt.flight_id, acf.model, acf.range, sts.aircraft_code, sts.count_seats, tflt.flight_id, tflt.fare_conditions, tflt.tickets_no, tflt.amount_tickets, arp.city
